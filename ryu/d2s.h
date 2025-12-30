@@ -159,9 +159,6 @@ static inline uint64_t div1e8(const uint64_t x) {
 #include <assert.h>
 #include <stdint.h>
 
-// Defines RYU_32_BIT_PLATFORM if applicable.
-#include "ryu/d2s.h"
-
 #if defined(HAS_64_BIT_INTRINSICS)
 
 #include <intrin.h>
