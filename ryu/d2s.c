@@ -27,29 +27,13 @@
 //     size by about 10x (only one case, and only double) at the cost of some
 //     performance. Currently requires MSVC intrinsics.
 
-#include "ryu/ryu.h"
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef RYU_DEBUG
-#include <inttypes.h>
-#include <stdio.h>
-#endif
-
-#include "ryu/common.h"
-#include "ryu/digit_table.h"
-#include "ryu/d2s_intrinsics.h"
-
-// Include either the small or the full lookup tables depending on the mode.
-#if defined(RYU_OPTIMIZE_SIZE)
-#include "ryu/d2s_small_table.h"
-#else
-#include "ryu/d2s_full_table.h"
-#endif
+#include "ryu/d2s.h"
 
 #define DOUBLE_MANTISSA_BITS 52
 #define DOUBLE_EXPONENT_BITS 11
@@ -102,10 +86,6 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
   const bool even = (m2 & 1) == 0;
   const bool acceptBounds = even;
 
-#ifdef RYU_DEBUG
-  printf("-> %" PRIu64 " * 2^%d\n", m2, e2 + 2);
-#endif
-
   // Step 2: Determine the interval of valid decimal representations.
   const uint64_t mv = 4 * m2;
   // Implicit bool -> int conversion. True is 1, false is 0.
@@ -132,10 +112,6 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
     vr = mulShiftAll64(m2, pow5, i, &vp, &vm, mmShift);
 #else
     vr = mulShiftAll64(m2, DOUBLE_POW5_INV_SPLIT[q], i, &vp, &vm, mmShift);
-#endif
-#ifdef RYU_DEBUG
-    printf("%" PRIu64 " * 2^%d / 10^%u\n", mv, e2, q);
-    printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
 #endif
     if (q <= 21) {
       // This should use q <= 22, but I think 21 is also safe. Smaller values
@@ -168,11 +144,6 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
 #else
     vr = mulShiftAll64(m2, DOUBLE_POW5_SPLIT[i], j, &vp, &vm, mmShift);
 #endif
-#ifdef RYU_DEBUG
-    printf("%" PRIu64 " * 5^%d / 10^%u\n", mv, -e2, q);
-    printf("%u %d %d %d\n", q, i, k, j);
-    printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
-#endif
     if (q <= 1) {
       // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
       // mv = 4 * m2, so it always has at least two trailing 0 bits.
@@ -190,17 +161,8 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
       // <=> p2(mv) >= q && p5(mv) - e2 >= q
       // <=> p2(mv) >= q (because -e2 >= q)
       vrIsTrailingZeros = multipleOfPowerOf2(mv, q);
-#ifdef RYU_DEBUG
-      printf("vr is trailing zeros=%s\n", vrIsTrailingZeros ? "true" : "false");
-#endif
     }
   }
-#ifdef RYU_DEBUG
-  printf("e10=%d\n", e10);
-  printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
-  printf("vm is trailing zeros=%s\n", vmIsTrailingZeros ? "true" : "false");
-  printf("vr is trailing zeros=%s\n", vrIsTrailingZeros ? "true" : "false");
-#endif
 
   // Step 4: Find the shortest decimal representation in the interval of valid representations.
   int32_t removed = 0;
@@ -226,10 +188,6 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
       vm = vmDiv10;
       ++removed;
     }
-#ifdef RYU_DEBUG
-    printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
-    printf("d-10=%s\n", vmIsTrailingZeros ? "true" : "false");
-#endif
     if (vmIsTrailingZeros) {
       for (;;) {
         const uint64_t vmDiv10 = div10(vm);
@@ -248,10 +206,6 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
         ++removed;
       }
     }
-#ifdef RYU_DEBUG
-    printf("%" PRIu64 " %d\n", vr, lastRemovedDigit);
-    printf("vr is trailing zeros=%s\n", vrIsTrailingZeros ? "true" : "false");
-#endif
     if (vrIsTrailingZeros && lastRemovedDigit == 5 && vr % 2 == 0) {
       // Round even if the exact number is .....50..0.
       lastRemovedDigit = 4;
@@ -290,20 +244,10 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
       vm = vmDiv10;
       ++removed;
     }
-#ifdef RYU_DEBUG
-    printf("%" PRIu64 " roundUp=%s\n", vr, roundUp ? "true" : "false");
-    printf("vr is trailing zeros=%s\n", vrIsTrailingZeros ? "true" : "false");
-#endif
     // We need to take vr + 1 if vr is outside bounds or we need to round up.
     output = vr + (vr == vm || roundUp);
   }
   const int32_t exp = e10 + removed;
-
-#ifdef RYU_DEBUG
-  printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
-  printf("O=%" PRIu64 "\n", output);
-  printf("EXP=%d\n", exp);
-#endif
 
   floating_decimal_64 fd;
   fd.exponent = exp;
@@ -320,12 +264,6 @@ static inline int to_chars(const floating_decimal_64 v, const bool sign, char* c
 
   uint64_t output = v.mantissa;
   const uint32_t olength = decimalLength17(output);
-
-#ifdef RYU_DEBUG
-  printf("DIGITS=%" PRIu64 "\n", v.mantissa);
-  printf("OLEN=%u\n", olength);
-  printf("EXP=%u\n", v.exponent + olength);
-#endif
 
   // Print the decimal digits.
   // The following code is equivalent to:
@@ -454,14 +392,6 @@ static inline bool d2d_small_int(const uint64_t ieeeMantissa, const uint32_t iee
 int d2s_buffered_n(double f, char* result) {
   // Step 1: Decode the floating-point number, and unify normalized and subnormal cases.
   const uint64_t bits = double_to_bits(f);
-
-#ifdef RYU_DEBUG
-  printf("IN=");
-  for (int32_t bit = 63; bit >= 0; --bit) {
-    printf("%d", (int) ((bits >> bit) & 1));
-  }
-  printf("\n");
-#endif
 
   // Decode bits into sign, mantissa, and exponent.
   const bool ieeeSign = ((bits >> (DOUBLE_MANTISSA_BITS + DOUBLE_EXPONENT_BITS)) & 1) != 0;
