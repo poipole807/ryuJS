@@ -335,9 +335,11 @@ static inline int to_chars(const floating_decimal_64 v, const bool sign, char* c
   }
 
   // Print the exponent.
-  result[index++] = 'E';
+  result[index++] = 'e'; // Scratch Everywhere! change: E -> e
   int32_t exp = v.exponent + (int32_t) olength - 1;
-  if (exp < 0) {
+  if (exp > 0) { // Scratch Everywhere! change: Always add sign after e
+    result[index++] = '+';
+  } else {
     result[index++] = '-';
     exp = -exp;
   }
