@@ -93,8 +93,9 @@ static inline int copy_special_str(char * const result, const bool sign, const b
     memcpy(result + sign, "Infinity", 8);
     return sign + 8;
   }
-  memcpy(result + sign, "0E0", 3);
-  return sign + 3;
+  // Scratch Everywhere! change: 0E0 -> 0
+  memcpy(result + sign, "0", 1);
+  return sign + 1;
 }
 
 static inline uint64_t double_to_bits(const double d) {

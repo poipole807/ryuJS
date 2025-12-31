@@ -255,7 +255,7 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
   return fd;
 }
 
-static inline int to_chars(const floating_decimal_64 v, const bool sign, char* const result) {
+static inline int to_chars_scientific(const floating_decimal_64 v, const bool sign, char* const result) {
   // Step 5: Print the decimal representation.
   int index = 0;
   if (sign) {
@@ -359,6 +359,64 @@ static inline int to_chars(const floating_decimal_64 v, const bool sign, char* c
   return index;
 }
 
+static inline int to_chars_regular(
+    const floating_decimal_64 v,
+    const bool sign,
+    char* const result)
+{
+  int index = 0;
+  if (sign) result[index++] = '-';
+
+  uint64_t output = v.mantissa;
+  const uint32_t olength = decimalLength17(output);
+  const int32_t decimal_pos = (int32_t)olength + v.exponent;
+
+  // Handle numbers < 1 → "0.xxx"
+  if (decimal_pos <= 0) {
+    result[index++] = '0';
+    result[index++] = '.';
+    for (int32_t i = 0; i < -decimal_pos; ++i) {
+      result[index++] = '0';
+    }
+  }
+
+  // Total digits before decimal ends
+  const uint32_t integer_digits =
+      decimal_pos > 0 ? (uint32_t)decimal_pos : 0;
+
+  uint32_t written = 0;
+  uint32_t i = 0;
+
+  // Write mantissa digits left-to-right
+  char buf[17];
+  char* p = buf + olength;
+
+  uint64_t x = output;
+  while (x >= 10) {
+    const uint32_t c = (uint32_t)(x % 10);
+    *--p = (char)('0' + c);
+    x /= 10;
+  }
+  *--p = (char)('0' + (uint32_t)x);
+
+  for (uint32_t j = 0; j < olength; ++j) {
+    if (decimal_pos > 0 && written == integer_digits) {
+      result[index++] = '.';
+    }
+    result[index++] = p[j];
+    ++written;
+  }
+
+  // Trailing zeros if exponent > 0
+  if (decimal_pos > (int32_t)olength) {
+    const uint32_t zeros = (uint32_t)(decimal_pos - olength);
+    memset(result + index, '0', zeros);
+    index += zeros;
+  }
+
+  return index;
+}
+
 static inline bool d2d_small_int(const uint64_t ieeeMantissa, const uint32_t ieeeExponent,
   floating_decimal_64* const v) {
   const uint64_t m2 = (1ull << DOUBLE_MANTISSA_BITS) | ieeeMantissa;
@@ -424,7 +482,13 @@ int d2s_buffered_n(double f, char* result) {
     v = d2d(ieeeMantissa, ieeeExponent);
   }
 
-  return to_chars(v, ieeeSign, result);
+  // Scratch Everywhere! change: Switch to regular notation for these ranges
+  if (ieeeExponent >= 1093 || ieeeExponent <= 999) {
+    // abs(f) >= 1e21 or abs(f) < 1e-7
+    return to_chars_scientific(v, ieeeSign, result);
+  } else {
+    return to_chars_regular(v, ieeeSign, result);
+  }
 }
 
 void d2s_buffered(double f, char* result) {
