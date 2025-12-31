@@ -38,9 +38,22 @@ typedef __uint128_t uint128_t;
 #define RYU_32_BIT_PLATFORM
 #endif
 
+#ifndef D2S_H
+#define D2S_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int d2s_buffered_n(double f, char* result);
 void d2s_buffered(double f, char* result);
 char* d2s(double f);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
 
 // Returns e == 0 ? 1 : ceil(log_2(5^e)); requires 0 <= e <= 3528.
 static inline int32_t pow5bits(const int32_t e) {
