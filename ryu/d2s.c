@@ -483,8 +483,8 @@ int d2s_buffered_n(double f, char* result) {
   }
 
   // Scratch Everywhere! change: Switch to regular notation for these ranges
-  if (ieeeExponent >= 1093 || ieeeExponent <= 999) {
-    // abs(f) >= 1e21 or abs(f) < 1e-7
+  const int32_t decimalExponent = v.exponent + (int32_t) decimalLength17(v.mantissa) - 1;
+  if (decimalExponent >= 21 || decimalExponent < -6) {
     return to_chars_scientific(v, ieeeSign, result);
   } else {
     return to_chars_regular(v, ieeeSign, result);
